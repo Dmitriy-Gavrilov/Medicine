@@ -1,8 +1,11 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 
 import uvicorn
 
+from app.db.dependencies import session_manager
 from app.routers.user import router as users_router
 from app.routers.patient import router as patients_router
 from app.routers.call import router as calls_router
@@ -12,7 +15,16 @@ from app.routers.auth import router as auth_router
 from app.routers.notifications import router as notifications_router
 from app.routers.reports import router as reports_router
 
-app = FastAPI(debug=True,
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+
+    await session_manager.close()
+
+
+app = FastAPI(lifespan=lifespan,
+              debug=True,
               title="Medicine System")
 api_router = APIRouter(prefix="/api")
 
