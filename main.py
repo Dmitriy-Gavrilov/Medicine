@@ -1,6 +1,7 @@
+import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 import uvicorn
@@ -15,6 +16,8 @@ from app.routers.auth import router as auth_router
 from app.routers.notifications import router as notifications_router
 from app.routers.reports import router as reports_router
 
+from logger import logger
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -26,6 +29,24 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan,
               debug=True,
               title="Medicine System")
+
+
+@app.middleware("http")
+async def log_process_time(request: Request, call_next):
+    start_time = time.time()
+
+    response: Response = await call_next(request)
+
+    process_time = round(time.time() - start_time, 4)
+    method = request.method
+    path = request.url.path
+    code = response.status_code
+
+    logger.info(f"{method} {path} {code} {process_time}ms")
+
+    return response
+
+
 api_router = APIRouter(prefix="/api")
 
 api_router.include_router(users_router)
