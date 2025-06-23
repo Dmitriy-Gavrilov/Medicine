@@ -7,7 +7,7 @@ from app.db.models.user import UserRole
 class UserBaseSchema(BaseSchema):
     login: str = Field(min_length=4, max_length=20)
     password: str = Field(min_length=8, max_length=20)
-    name: str = Field(min_length=1, ax_length=50)
+    name: str = Field(min_length=1, max_length=50)
     surname: str = Field(min_length=1, max_length=50)
     patronym: str = Field(min_length=1, max_length=50)
     role: UserRole
@@ -18,7 +18,7 @@ class UserCreateSchema(UserBaseSchema):
 
 
 class UserUpdateSchema(BaseSchema):
-    name: str = Field(min_length=1, ax_length=50)
+    name: str = Field(min_length=1, max_length=50)
     surname: str = Field(min_length=1, max_length=50)
     patronym: str = Field(min_length=1, max_length=50)
 

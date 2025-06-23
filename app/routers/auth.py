@@ -1,6 +1,8 @@
 from authx import AuthX, AuthXConfig
-from fastapi import APIRouter, Response, Request
+from fastapi import APIRouter, Response, Request, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.dependencies import get_session
 from app.schemas.auth import AuthSchema, AuthResponseSchema
 from app.services.auth_service import AuthService
 from app.settings import settings
@@ -24,8 +26,8 @@ service = AuthService()
 @router.post(path="/login",
              summary="Войти в систему",
              response_model=AuthResponseSchema)
-async def login(auth: AuthSchema, response: Response):
-    user = await service.check_user(auth)
+async def login(auth: AuthSchema, response: Response, session: AsyncSession = Depends(get_session)):
+    user = await service.check_user(auth, session)
     token = security.create_access_token(uid=str(user.id))
     response.set_cookie(config.JWT_ACCESS_COOKIE_NAME, token, httponly=True, samesite="none", secure=True)
     return AuthResponseSchema(access_token=token)

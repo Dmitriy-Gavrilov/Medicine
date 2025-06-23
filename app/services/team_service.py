@@ -1,3 +1,5 @@
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.db.models.call import CallStatus
 from app.db.repository import Repository
 from app.db.models.team import Team
@@ -10,11 +12,11 @@ class TeamService:
     def __init__(self):
         self.repo: Repository = Repository(Team)
 
-    async def get_teams(self) -> list[Team]:
-        return await self.repo.get_by_filters(is_deleted=False)
+    async def get_teams(self, session: AsyncSession) -> list[Team]:
+        return await self.repo.get_by_filters(session, is_deleted=False)
 
-    async def get_full_info_teams(self) -> list[TeamFullInfoSchema]:
-        teams = await self.get_teams()
+    async def get_full_info_teams(self, session: AsyncSession) -> list[TeamFullInfoSchema]:
+        teams = await self.get_teams(session)
 
         result = []
         for t in teams:
@@ -37,15 +39,15 @@ class TeamService:
 
         return result
 
-    async def get_team_by_id(self, team_id: int) -> Team:
-        return await self.repo.get_by_id(team_id)
+    async def get_team_by_id(self, team_id: int, session: AsyncSession) -> Team:
+        return await self.repo.get_by_id(session, team_id)
 
-    async def add_team(self, team: TeamCreateSchema) -> TeamModelSchema:
-        created_team = await self.repo.create(Team(**team.model_dump()))
+    async def add_team(self, team: TeamCreateSchema, session: AsyncSession) -> TeamModelSchema:
+        created_team = await self.repo.create(session, Team(**team.model_dump()))
         return TeamModelSchema.from_orm(created_team)
 
-    async def get_free_teams(self) -> list[TeamModelSchema]:
-        teams = await self.get_teams()
+    async def get_free_teams(self, session: AsyncSession) -> list[TeamModelSchema]:
+        teams = await self.get_teams(session)
         return [
             TeamModelSchema.from_orm(t)
             for t in teams
@@ -53,22 +55,22 @@ class TeamService:
                and t.car.status
         ]
 
-    async def get_team_by_user_id(self, user_id: int) -> Team:
-        all_teams = await self.get_teams()
+    async def get_team_by_user_id(self, user_id: int, session: AsyncSession) -> Team:
+        all_teams = await self.get_teams(session)
         for t in all_teams:
             if t.worker1_id == user_id or t.worker2_id == user_id or t.worker3_id == user_id:
                 return t
         raise TeamNotFoundException()
 
-    async def move_team(self, team_id: int, new_coordinates: CoordinatesSchema) -> Team:
-        team = await self.repo.get_by_id(team_id)
+    async def move_team(self, team_id: int, new_coordinates: CoordinatesSchema, session: AsyncSession) -> Team:
+        team = await self.repo.get_by_id(session, team_id)
         if not team:
             raise TeamNotFoundException()
-        await self.repo.update(team_id, lat=new_coordinates.lat, lon=new_coordinates.lon)
-        return await self.repo.get_by_id(team_id)
+        await self.repo.update(session, team_id, lat=new_coordinates.lat, lon=new_coordinates.lon)
+        return await self.repo.get_by_id(session, team_id)
 
-    async def delete_team(self, team_id: int):
-        team = await self.repo.get_by_id(team_id)
+    async def delete_team(self, team_id: int, session: AsyncSession):
+        team = await self.repo.get_by_id(session, team_id)
         if any(call.status == CallStatus.ACCEPTED for call in team.calls):
             raise TeamBusyException()
-        return await self.repo.update(team_id, is_deleted=True)
+        return await self.repo.update(session, team_id, is_deleted=True)

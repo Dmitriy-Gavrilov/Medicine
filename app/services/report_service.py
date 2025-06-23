@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import and_, or_
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Call, Team, Patient, User
 from app.db.models.call import CallStatus
@@ -13,9 +14,9 @@ class ReportService:
         self.call_repo: Repository = Repository(Call)
         self.team_repo: Repository = Repository(Team)
 
-    async def get_teams_load(self, date_time_start: datetime):
-        teams = await self.team_repo.get()
-        calls = await self.call_repo.get_by_conditions(Call.date_time >= date_time_start)
+    async def get_teams_load(self, date_time_start: datetime, session: AsyncSession):
+        teams = await self.team_repo.get(session)
+        calls = await self.call_repo.get_by_conditions(session, Call.date_time >= date_time_start)
 
         load = {t.id: 0 for t in teams}
 
@@ -25,8 +26,8 @@ class ReportService:
 
         return TeamsLoadSchema(load=load)
 
-    async def get_calls_statistics(self, date_time_start: datetime):
-        calls = await self.call_repo.get_by_conditions(Call.date_time >= date_time_start)
+    async def get_calls_statistics(self, date_time_start: datetime, session: AsyncSession):
+        calls = await self.call_repo.get_by_conditions(session, Call.date_time >= date_time_start)
         stats = {CallStatus.COMPLETED: 0,
                  CallStatus.REJECTED: 0}
         for call in calls:
@@ -35,8 +36,9 @@ class ReportService:
 
         return CallsStatisticsSchema(statistics=stats)
 
-    async def get_calls_reports(self, date_time_start: datetime, date_time_end: datetime):
-        calls: list[Call] = await self.call_repo.get_by_conditions(and_(and_(Call.date_time >= date_time_start,
+    async def get_calls_reports(self, date_time_start: datetime, date_time_end: datetime, session: AsyncSession):
+        calls: list[Call] = await self.call_repo.get_by_conditions(session,
+                                                                   and_(and_(Call.date_time >= date_time_start,
                                                                              Call.date_time <= date_time_end),
                                                                         or_(Call.status == CallStatus.COMPLETED,
                                                                             Call.status == CallStatus.REJECTED)))
