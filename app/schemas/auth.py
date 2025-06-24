@@ -12,3 +12,4 @@ class AuthSchema(BaseSchema):
 
 class AuthResponseSchema(BaseSchema):
     access_token: str
+    refresh_token: str

@@ -14,11 +14,17 @@ class Settings(BaseSettings):
 
     JWT_SECRET_KEY: str
     JWT_COOKIE_NAME: str
+    JWT_REFRESH_COOKIE_NAME: str
     JWT_ACCESS_TOKEN_EXPIRES: int
+    JWT_REFRESH_TOKEN_EXPIRES: int
 
     @property
     def JWT_ACCESS_TOKEN_EXPIRES(self):
-        return timedelta(seconds=self.JWT_ACCESS_TOKEN_EXPIRES_SECONDS)
+        return self.JWT_ACCESS_TOKEN_EXPIRES
+
+    @property
+    def JWT_REFRESH_TOKEN_EXPIRES(self):
+        return self.JWT_REFRESH_TOKEN_EXPIRES
 
     model_config = SettingsConfigDict(env_file=".env")
 
