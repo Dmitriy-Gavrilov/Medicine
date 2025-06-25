@@ -9,7 +9,7 @@ from app.services.user_service import UserService
 
 from app.schemas.notification import NotificationModelSchema
 
-from app.utils.auth_utils import require_role, get_current_user
+from app.utils.auth_utils import require_role, get_current_user, required_roles
 
 router = APIRouter(prefix="/users", tags=["Users"])
 service = UserService()
@@ -18,28 +18,33 @@ service = UserService()
 @router.get(path="/check",
             summary="Проверка аутентификации",
             response_model=UserModelSchema)
-async def check_auth(request: Request, session: AsyncSession = Depends(get_session)):
+async def check_auth(request: Request,
+                     session: AsyncSession = Depends(get_session)):
     return await get_current_user(request, session)
 
 
 @router.get(path="/",
             summary="Получить всех пользователей",
             response_model=list[UserModelSchema])
-async def get_users(session: AsyncSession = Depends(get_session)):
+async def get_users(session: AsyncSession = Depends(get_session),
+                    user: User = Depends(require_role(UserRole.ADMIN))):
     return await service.get_users(session)
 
 
 @router.get(path="/role/{user_role}",
             summary="Получить пользователей по роли",
             response_model=list[UserModelSchema])
-async def get_users_by_role(user_role: UserRole, session: AsyncSession = Depends(get_session)):
+async def get_users_by_role(user_role: UserRole,
+                            session: AsyncSession = Depends(get_session),
+                            user: User = Depends(require_role(UserRole.ADMIN))):
     return await service.get_users_by_role(user_role, session)
 
 
 @router.get(path="/workers/free",
             summary="Получить свободных работников",
             response_model=list[UserModelSchema])
-async def get_free_workers(session: AsyncSession = Depends(get_session)):
+async def get_free_workers(session: AsyncSession = Depends(get_session),
+                           user: User = Depends(require_role(UserRole.ADMIN))):
     res = await service.get_free_workers(session)
     return res
 
@@ -47,7 +52,8 @@ async def get_free_workers(session: AsyncSession = Depends(get_session)):
 @router.get(path="/{user_id}",
             summary="Получить пользователя по id",
             response_model=UserModelSchema)
-async def get_user_by_id(user_id: int, session: AsyncSession = Depends(get_session)):
+async def get_user_by_id(user_id: int,
+                         session: AsyncSession = Depends(get_session)):
     return await service.get_user_by_id(user_id, session)
 
 
@@ -57,27 +63,34 @@ async def get_user_by_id(user_id: int, session: AsyncSession = Depends(get_sessi
              status_code=201)
 async def create_user(new_user: UserCreateSchema,
                       session: AsyncSession = Depends(get_session),
-                      user: User = Depends(require_role(UserRole.ADMIN))
-                      ):
+                      user: User = Depends(require_role(UserRole.ADMIN))):
     return await service.add_user(new_user, session)
 
 
 @router.put(path="/{user_id}",
             summary="Обновить пользователя",
             response_model=UserModelSchema)
-async def update_user(user_id: int, user_data: UserUpdateSchema, session: AsyncSession = Depends(get_session)):
+async def update_user(user_id: int,
+                      user_data: UserUpdateSchema,
+                      session: AsyncSession = Depends(get_session),
+                      user: User = Depends(require_role(UserRole.ADMIN))):
     return await service.update_user(user_id, user_data, session)
 
 
 @router.delete(path="/{user_id}",
                summary="Удалить пользователя",
                status_code=204)
-async def delete_user(user_id: int, session: AsyncSession = Depends(get_session)):
+async def delete_user(user_id: int,
+                      session: AsyncSession = Depends(get_session),
+                      user: User = Depends(require_role(UserRole.ADMIN))):
     return await service.delete_user(user_id, session)
 
 
 @router.get(path="/{user_id}/notifications",
             summary="Получить уведомления пользователя",
             response_model=list[NotificationModelSchema])
-async def get_user_notifications(user_id: int, session: AsyncSession = Depends(get_session)):
+async def get_user_notifications(user_id: int,
+                                 session: AsyncSession = Depends(get_session),
+                                 user: User = Depends(
+                                     required_roles([UserRole.ADMIN, UserRole.DISPATCHER, UserRole.WORKER]))):
     return await service.get_user_notifications(user_id, session)

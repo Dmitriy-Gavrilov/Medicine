@@ -22,3 +22,7 @@ class AuthService:
         if user.role != auth.role:
             raise WrongRoleException()
         return UserModelSchema.from_orm(user)
+
+    async def get_user(self, user_id: int, session: AsyncSession) -> UserModelSchema:
+        user = await self.repo.get_by_id(session, user_id)
+        return UserModelSchema.from_orm(user)

@@ -7,8 +7,11 @@ from fastapi import APIRouter
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.dependencies import get_session
+from app.db.models import User
+from app.db.models.user import UserRole
 from app.schemas.report import TeamsLoadSchema, CallsStatisticsSchema
 from app.services.report_service import ReportService
+from app.utils.auth_utils import require_role
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 service = ReportService()
@@ -17,21 +20,27 @@ service = ReportService()
 @router.get(path="/teams_load",
             summary="Получить нагрузку на бригады",
             response_model=TeamsLoadSchema)
-async def get_teams_load(date_time_start: datetime, session: AsyncSession = Depends(get_session)):
+async def get_teams_load(date_time_start: datetime,
+                         session: AsyncSession = Depends(get_session),
+                         user: User = Depends(require_role(UserRole.ADMIN))):
     return await service.get_teams_load(date_time_start, session)
 
 
 @router.get(path="/calls_statistics",
             summary="Получить статистику вызовов",
             response_model=CallsStatisticsSchema)
-async def get_teams_load(date_time_start: datetime, session: AsyncSession = Depends(get_session)):
+async def get_teams_load(date_time_start: datetime,
+                         session: AsyncSession = Depends(get_session),
+                         user: User = Depends(require_role(UserRole.ADMIN))):
     return await service.get_calls_statistics(date_time_start, session)
 
 
 @router.get(path="/calls_report",
             summary="Получить детальный отчет о вызовах")
-async def get_calls_report(date_time_start: datetime, date_time_end: datetime,
-                           session: AsyncSession = Depends(get_session)):
+async def get_calls_report(date_time_start: datetime,
+                           date_time_end: datetime,
+                           session: AsyncSession = Depends(get_session),
+                           user: User = Depends(require_role(UserRole.ADMIN))):
     report_data = await service.get_calls_reports(date_time_start, date_time_end, session)
 
     csv_buffer = StringIO()

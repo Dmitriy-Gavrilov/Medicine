@@ -41,3 +41,20 @@ def require_role(required_role: UserRole):
         return current_user
 
     return dependency
+
+
+def required_roles(required_roles: list[UserRole]):
+    async def dependency(
+            request: Request,
+            session: AsyncSession = Depends(get_session)) -> User:
+        current_user = await get_current_user(request, session)
+        exception = None
+        for role in required_roles:
+            try:
+                await RoleVerifier(current_user).verify(role)
+                return current_user
+            except Exception as e:
+                exception = e
+        raise exception
+
+    return dependency

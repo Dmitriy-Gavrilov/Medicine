@@ -30,10 +30,12 @@ service = AuthService()
 @router.post(path="/login",
              summary="Войти в систему",
              response_model=AuthResponseSchema)
-async def login(auth: AuthSchema, response: Response, session: AsyncSession = Depends(get_session)):
+async def login(auth: AuthSchema,
+                response: Response,
+                session: AsyncSession = Depends(get_session)):
     user = await service.check_user(auth, session)
 
-    access_token = security.create_access_token(uid=str(user.id))
+    access_token = security.create_access_token(uid=str(user.id), data={"role": user.role})
     refresh_token = security.create_refresh_token(uid=str(user.id))
 
     response.set_cookie(config.JWT_ACCESS_COOKIE_NAME, access_token, httponly=True, samesite="none", secure=True)
@@ -50,11 +52,16 @@ async def logout(response: Response):
 
 @router.post(path="/refresh",
              summary="Обновить access токен")
-async def refresh(request: Request, response: Response):
+async def refresh(request: Request,
+                  response: Response,
+                  session: AsyncSession = Depends(get_session)):
     try:
         refresh_token = await security.get_refresh_token_from_request(request)
         token_payload = security.verify_token(refresh_token, verify_csrf=False)
-        new_access_token = security.create_access_token(uid=token_payload.sub)
+        user_id = int(token_payload.sub)
+
+        user = await service.get_user(user_id, session)
+        new_access_token = security.create_access_token(uid=str(user_id), data={"role": user.role})
 
         response.delete_cookie(config.JWT_ACCESS_COOKIE_NAME)
         response.set_cookie(config.JWT_ACCESS_COOKIE_NAME, new_access_token, httponly=True, samesite="none",
