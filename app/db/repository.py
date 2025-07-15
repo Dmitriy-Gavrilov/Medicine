@@ -23,6 +23,23 @@ class Repository(Generic[T]):
         res: Result = await session.execute(select(self.model).where(*conditions))
         return res.unique().scalars().all()
 
+    async def get_custom(self,
+                         session: AsyncSession,
+                         filters: dict = None,
+                         conditions: list = None,
+                         order_by: list = None,
+                         limit: int = None,
+                         offset: int = None):
+        stmt = select(self.model)
+        if filters: stmt = stmt.filter_by(**filters)
+        if conditions: stmt = stmt.where(*conditions)
+        if order_by: stmt = stmt.order_by(*order_by)
+        if limit: stmt = stmt.limit(limit)
+        if offset: stmt = stmt.offset(offset)
+
+        res: Result = await session.execute(stmt)
+        return res.unique().scalars().all()
+
     async def get_by_id(self, session: AsyncSession, id: int) -> T:
         res: Result = await session.execute(select(self.model).filter_by(id=id))
         return res.scalars().first()

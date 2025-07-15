@@ -6,6 +6,7 @@ from app.db.models.user import User, UserRole
 from app.schemas.user import UserModelSchema, UserCreateSchema, UserUpdateSchema
 
 from app.exceptions.user import UserNotFoundException, UserAlreadyExistsException, WorkerBusyError
+from app.services.notification_service import NotificationService
 from app.services.team_service import TeamService
 
 from app.utils.password_hasher import PasswordHasher
@@ -17,6 +18,7 @@ class UserService:
     def __init__(self):
         self.repo: Repository = Repository(User)
         self.team_service: TeamService = TeamService()
+        self.notification_service: NotificationService = NotificationService()
 
     async def __get_busy_workers(self, session: AsyncSession) -> set:
         teams = await self.team_service.get_teams(session)
@@ -90,4 +92,4 @@ class UserService:
         if not user:
             raise UserNotFoundException()
 
-        return [NotificationModelSchema.from_orm(n) for n in user.notifications][::-1]
+        return await self.notification_service.get_user_notifications(user_id, session)

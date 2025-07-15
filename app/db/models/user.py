@@ -27,7 +27,7 @@ class User(Base):
 
     notifications: Mapped[list["Notification"]] = relationship("Notification",
                                                                back_populates="user",
-                                                               lazy="selectin",
+                                                               lazy="noload",
                                                                cascade="delete")
     team_as_worker1: Mapped["Team"] = relationship("Team",
                                                    foreign_keys="[Team.worker1_id]",
