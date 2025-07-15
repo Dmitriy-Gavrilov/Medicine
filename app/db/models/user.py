@@ -27,19 +27,19 @@ class User(Base):
 
     notifications: Mapped[list["Notification"]] = relationship("Notification",
                                                                back_populates="user",
-                                                               lazy="joined",
+                                                               lazy="selectin",
                                                                cascade="delete")
     team_as_worker1: Mapped["Team"] = relationship("Team",
                                                    foreign_keys="[Team.worker1_id]",
                                                    back_populates="worker1",
-                                                   lazy="joined")
+                                                   lazy="selectin")
 
     team_as_worker2: Mapped["Team"] = relationship("Team",
                                                    foreign_keys="[Team.worker2_id]",
                                                    back_populates="worker2",
-                                                   lazy="joined")
+                                                   lazy="selectin")
 
     team_as_worker3: Mapped["Team"] = relationship("Team",
                                                    foreign_keys="[Team.worker3_id]",
                                                    back_populates="worker3",
-                                                   lazy="joined")
+                                                   lazy="selectin")

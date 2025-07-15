@@ -1,3 +1,4 @@
+import time
 from typing import Generic, TypeVar, Type
 
 from sqlalchemy import Result, select, delete, update
@@ -11,24 +12,20 @@ class Repository(Generic[T]):
         self.model = model
 
     async def get(self, session: AsyncSession):
-        async with session:
-            res: Result = await session.execute(select(self.model))
-            return res.unique().scalars().all()
+        res: Result = await session.execute(select(self.model))
+        return res.unique().scalars().all()
 
     async def get_by_filters(self, session: AsyncSession, **filters):
-        async with session:
-            res: Result = await session.execute(select(self.model).filter_by(**filters))
-            return res.unique().scalars().all()
+        res: Result = await session.execute(select(self.model).filter_by(**filters))
+        return res.unique().scalars().all()
 
     async def get_by_conditions(self, session: AsyncSession, *conditions):
-        async with session:
-            res: Result = await session.execute(select(self.model).where(*conditions))
-            return res.unique().scalars().all()
+        res: Result = await session.execute(select(self.model).where(*conditions))
+        return res.unique().scalars().all()
 
     async def get_by_id(self, session: AsyncSession, id: int) -> T:
-        async with session:
-            res: Result = await session.execute(select(self.model).filter_by(id=id))
-            return res.scalars().first()
+        res: Result = await session.execute(select(self.model).filter_by(id=id))
+        return res.scalars().first()
 
     async def create(self, session: AsyncSession, new: T) -> T:
         async with session:

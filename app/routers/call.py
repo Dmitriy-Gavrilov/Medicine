@@ -5,6 +5,7 @@ from app.db.dependencies import get_session
 from app.db.models import User
 from app.db.models.user import UserRole
 from app.schemas.call import CallCreateSchema, CallModelSchema, CallFullInfoSchema
+from app.schemas.team import CoordinatesSchema
 from app.services.call_service import CallService, TroubleType
 from app.utils.auth_utils import require_role, required_roles
 
@@ -107,3 +108,20 @@ async def trouble_call(call_id: int,
                        session: AsyncSession = Depends(get_session),
                        user: User = Depends(require_role(UserRole.WORKER))):
     return await service.trouble_call(call_id, trouble_type, session)
+
+
+@router.get(path="/route/{call_id}",
+            summary="Получить маршрут до вызова",
+            response_model=list[CoordinatesSchema])
+async def get_call_route(call_id: int,
+                         session: AsyncSession = Depends(get_session),
+                         user: User = Depends(require_role(UserRole.WORKER))):
+    return await service.get_call_route(call_id, session)
+
+
+@router.post(path="/route/start/{call_id}",
+             summary="Начать движение по маршруту")
+async def start_move(call_id: int,
+                     session: AsyncSession = Depends(get_session),
+                     user: User = Depends(require_role(UserRole.WORKER))):
+    return await service.start_move(call_id, session)

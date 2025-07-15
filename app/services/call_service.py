@@ -1,7 +1,10 @@
+import asyncio
+from collections import defaultdict
 from enum import StrEnum
 from sqlalchemy import or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.dependencies import get_manual_session
 from app.db.repository import Repository
 from app.db.models.call import Call, CallStatus, CallType
 
@@ -10,11 +13,16 @@ from app.schemas.car import CarUpdateSchema
 from app.schemas.notification import NotificationBaseSchema, NotificationType
 
 from app.exceptions.call import CallNotFoundException, CallAlreadyExistsException, TeamCallNotFound
-from app.schemas.team import CoordinatesSchema
+from app.schemas.team import CoordinatesSchema, TeamModelSchema
+from app.schemas.websocket import NewCallMessage, EventType, CallAcceptedMessage, CallRejectedMessage, \
+    AvailableTeamMessage, CompletedCallMessage, AssignedCallMessage, MoveTeamMessage, MoveFinishedMessage, \
+    TroubleCallMessage, MoveStartedMessage
 from app.services.car_service import CarService
+from app.services.connection_service import connection_service, ConnectionService
 
 from app.services.user_service import UserService
 from app.services.notification_service import NotificationService
+from app.utils.routing import Router
 
 
 class TroubleType(StrEnum):
@@ -29,6 +37,11 @@ class CallService:
         self.user_service: UserService = UserService()
         self.notification_service: NotificationService = NotificationService()
         self.car_service: CarService = CarService()
+        self.connection_service: ConnectionService = connection_service
+        self.routing_service: Router = Router()
+
+        self.routes: dict[int, list[CoordinatesSchema]] = defaultdict(list)
+        self.move_tasks: dict[int, asyncio.Task] = {}
 
     async def get_calls(self, session: AsyncSession):
         return await self.repo.get(session)
@@ -80,6 +93,8 @@ class CallService:
             patient_gender=call.patient.gender,
             created_at=call.created_at,
             updated_at=call.updated_at,
+            lat=call.lat,
+            lon=call.lon,
         )
 
     async def get_active_calls(self, session: AsyncSession) -> list:
@@ -91,7 +106,7 @@ class CallService:
             raise CallAlreadyExistsException()
 
         call_to_create = Call(**call.model_dump())
-        created_call = await self.repo.create(session, call_to_create)
+        created_call = CallModelSchema.from_orm(await self.repo.create(session, call_to_create))
 
         # Уведомления диспетчерам
         dispatchers = await self.user_service.get_users_by_filters(session, role="dispatcher")
@@ -101,7 +116,11 @@ class CallService:
                                                                             text="Новый вызов"),
                                                      session)
 
-        return CallModelSchema.from_orm(created_call)
+        # Оповещение диспетчеров через WS
+        await self.connection_service.notify_dispatchers(NewCallMessage(event=EventType.NEW_CALL,
+                                                                        call=created_call))
+
+        return created_call
 
     async def accept_call(self, call_id: int, team_id: int, session: AsyncSession) -> CallModelSchema:
         await self.repo.update(session, call_id, team_id=team_id, status=CallStatus.ACCEPTED)
@@ -112,10 +131,27 @@ class CallService:
                                                                             text="Назначен вызов"),
                                                      session)
 
-        return CallModelSchema.from_orm(await self.repo.get_by_id(session, call_id))
+        call = CallModelSchema.from_orm(await self.repo.get_by_id(session, call_id))
+
+        # Оповещение диспетчеров через WS
+        await self.connection_service.notify_dispatchers(CallAcceptedMessage(event=EventType.CALL_ACCEPTED,
+                                                                             call_id=call_id,
+                                                                             team_id=team_id))
+
+        # Оповещение работников через WS
+        await self.connection_service.notify_workers(team_id, AssignedCallMessage(event=EventType.ASSIGNED_CALL,
+                                                                                  call=(await self.get_call_full_info(
+                                                                                      call_id, session))))
+
+        return call
 
     async def reject_call(self, call_id: int, session: AsyncSession) -> CallModelSchema:
         await self.repo.update(session, call_id, status=CallStatus.REJECTED)
+
+        # Оповещение диспетчеров через WS
+        await self.connection_service.notify_dispatchers(CallRejectedMessage(event=EventType.CALL_REJECTED,
+                                                                             call_id=call_id))
+
         return CallModelSchema.from_orm(await self.repo.get_by_id(session, call_id))
 
     async def complete_call(self, call_id: int, session: AsyncSession):
@@ -134,18 +170,35 @@ class CallService:
         team = call.team
         await self.user_service.team_service.move_team(team.id, CoordinatesSchema(lat=call.lat, lon=call.lon), session)
 
+        # Оповещение диспетчеров через WS
+        await self.connection_service.notify_dispatchers(AvailableTeamMessage(event=EventType.AVAILABLE_TEAM,
+                                                                              team=TeamModelSchema.model_validate(
+                                                                                  team)))
+
+        # Оповещение работников через WS
+        await self.connection_service.notify_workers(team.id, CompletedCallMessage(event=EventType.COMPLETED_CALL,
+                                                                                   call_id=call_id))
+
         return call
 
-    async def trouble_call(self, call_id: int, trouble_type: TroubleType,  session: AsyncSession) -> Call:
+    async def trouble_call(self, call_id: int, trouble_type: TroubleType, session: AsyncSession) -> Call:
         call = await self.repo.get_by_id(session, call_id)
         if not call:
             raise CallNotFoundException()
+
+        await self.user_service.team_service.set_is_moving_team(call.team_id, False, session)
+        if call.team_id in self.routes:
+            del self.routes[call.team_id]
+        task = self.move_tasks.pop(call.team_id, None)
+        if task and not task.done():
+            task.cancel()
 
         await self.repo.update(session, call_id, status=CallStatus.NEW, team_id=None)
 
         if trouble_type == TroubleType.CAR_BROKEN:
             team_car = call.team.car
-            await self.car_service.update_car(team_car.id, CarUpdateSchema(number=team_car.number, status=False), session)
+            await self.car_service.update_car(team_car.id, CarUpdateSchema(number=team_car.number, status=False),
+                                              session)
 
             admins = await self.user_service.get_users_by_filters(session, role="admin")
             admins_ids = [d.id for d in admins]
@@ -163,4 +216,73 @@ class CallService:
                                                          notification_type=NotificationType.TROUBLE,
                                                          text=f"Проблема на вызове {call_id}: {trouble_type}"),
                                                      session)
+
+        # Оповещение диспетчеров через WS
+        await self.connection_service.notify_dispatchers(NewCallMessage(event=EventType.NEW_CALL,
+                                                                        call=CallModelSchema.model_validate(
+                                                                            call)))
+
+        await self.connection_service.notify_dispatchers(AvailableTeamMessage(event=EventType.AVAILABLE_TEAM,
+                                                                              team=TeamModelSchema.model_validate(
+                                                                                  call.team)))
+
+        # Оповещение работников через WS
+        await self.connection_service.notify_workers(call.team.id, TroubleCallMessage(event=EventType.TROUBLE_CALL,
+                                                                                      call_id=call_id))
+
         return await self.repo.get_by_id(session, call_id)
+
+    async def get_call_route(self, call_id: int, session: AsyncSession) -> list[CoordinatesSchema]:
+        call = await self.repo.get_by_id(session, call_id)
+        if not call:
+            raise CallNotFoundException()
+        team = call.team
+
+        cached_route = self.routes[team.id]
+        if cached_route:
+            for i in range(len(cached_route)):
+                if abs(cached_route[i].lat - team.lat) < 0.00005 and abs(cached_route[i].lon - team.lon) < 0.00005:
+                    self.routes[team.id] = cached_route[i:]
+                    return self.routes[team.id]
+
+        route = await self.routing_service.get_route(CoordinatesSchema(lat=team.lat, lon=team.lon),
+                                                     CoordinatesSchema(lat=call.lat, lon=call.lon))
+        self.routes[team.id] = route
+        return route
+
+    async def start_move(self, call_id: int, session: AsyncSession) -> None:
+        call = await self.repo.get_by_id(session, call_id)
+        if not call:
+            raise CallNotFoundException()
+
+        await self.connection_service.notify_workers(call.team.id, MoveStartedMessage(event=EventType.MOVE_STARTED))
+
+        task = asyncio.create_task(self.start_move_background(call_id))
+        self.move_tasks[call.team_id] = task
+
+    async def start_move_background(self, call_id: int) -> None:
+        async with get_manual_session() as session:
+            call = await self.repo.get_by_id(session, call_id)
+            if not call:
+                raise CallNotFoundException()
+            team = call.team
+
+            if team.is_moving:
+                return
+
+            await self.user_service.team_service.set_is_moving_team(team.id, True, session)
+            for point in self.routes[team.id]:
+                if not team.is_moving:
+                    return
+
+                await self.user_service.team_service.move_team(team.id, CoordinatesSchema(lat=point.lat, lon=point.lon),
+                                                               session)
+                await self.connection_service.notify_workers(team.id, MoveTeamMessage(event=EventType.MOVE_TEAM,
+                                                                                      coordinates=point))
+                await asyncio.sleep(0.25)
+
+            await self.user_service.team_service.set_is_moving_team(team.id, False, session)
+            await self.connection_service.notify_workers(team.id, MoveFinishedMessage(event=EventType.MOVE_FINISHED))
+
+            del self.routes[team.id]
+            self.move_tasks.pop(team.id, None)

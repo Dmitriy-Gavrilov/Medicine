@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 from app.db.dependencies import session_manager
+
 from app.routers.user import router as users_router
 from app.routers.patient import router as patients_router
 from app.routers.call import router as calls_router
@@ -15,6 +16,7 @@ from app.routers.team import router as teams_router
 from app.routers.auth import router as auth_router
 from app.routers.notifications import router as notifications_router
 from app.routers.reports import router as reports_router
+from app.routers.websocket import router as websockets_router
 
 from logger import logger
 
@@ -57,6 +59,7 @@ api_router.include_router(teams_router)
 api_router.include_router(auth_router)
 api_router.include_router(notifications_router)
 api_router.include_router(reports_router)
+api_router.include_router(websockets_router)
 
 app.include_router(api_router)
 
@@ -71,6 +74,5 @@ app.add_middleware(
 if __name__ == "__main__":
     uvicorn.run("main:app",
                 host="localhost",
-                reload=True,
                 ssl_certfile="localhost+1.pem",
                 ssl_keyfile="localhost+1-key.pem")

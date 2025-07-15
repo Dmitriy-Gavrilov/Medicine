@@ -18,13 +18,7 @@ class Settings(BaseSettings):
     JWT_ACCESS_TOKEN_EXPIRES: int
     JWT_REFRESH_TOKEN_EXPIRES: int
 
-    @property
-    def JWT_ACCESS_TOKEN_EXPIRES(self):
-        return self.JWT_ACCESS_TOKEN_EXPIRES
-
-    @property
-    def JWT_REFRESH_TOKEN_EXPIRES(self):
-        return self.JWT_REFRESH_TOKEN_EXPIRES
+    ROUTE_API_URL: str = "https://router.project-osrm.org/route/v1/driving"
 
     model_config = SettingsConfigDict(env_file=".env")
 

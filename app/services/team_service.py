@@ -1,3 +1,4 @@
+from sqlalchemy import or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.call import CallStatus
@@ -56,11 +57,20 @@ class TeamService:
         ]
 
     async def get_team_by_user_id(self, user_id: int, session: AsyncSession) -> Team:
-        all_teams = await self.get_teams(session)
-        for t in all_teams:
-            if t.worker1_id == user_id or t.worker2_id == user_id or t.worker3_id == user_id:
-                return t
-        raise TeamNotFoundException()
+        teams = await self.repo.get_by_conditions(
+            session,
+            and_(
+                Team.is_deleted == False,
+                or_(
+                    Team.worker1_id == user_id,
+                    Team.worker2_id == user_id,
+                    Team.worker3_id == user_id
+                )
+            )
+        )
+        if not teams:
+            raise TeamNotFoundException()
+        return teams[0]
 
     async def move_team(self, team_id: int, new_coordinates: CoordinatesSchema, session: AsyncSession) -> Team:
         team = await self.repo.get_by_id(session, team_id)
@@ -68,6 +78,9 @@ class TeamService:
             raise TeamNotFoundException()
         await self.repo.update(session, team_id, lat=new_coordinates.lat, lon=new_coordinates.lon)
         return await self.repo.get_by_id(session, team_id)
+
+    async def set_is_moving_team(self, team_id: int, is_moving: bool, session: AsyncSession) -> None:
+        await self.repo.update(session, team_id, is_moving=is_moving)
 
     async def delete_team(self, team_id: int, session: AsyncSession):
         team = await self.repo.get_by_id(session, team_id)

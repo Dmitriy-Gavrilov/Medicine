@@ -44,3 +44,5 @@ class CallFullInfoSchema(BaseModelSchema):
     patient_patronym: str = Field(min_length=1, max_length=20)
     patient_age: int = Field(gt=0, le=150)
     patient_gender: PatientGender
+    lat: float = Field(ge=59.7, le=60.2)
+    lon: float = Field(ge=29.6, le=30.9)

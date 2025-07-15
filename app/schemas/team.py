@@ -8,6 +8,7 @@ class TeamBaseSchema(BaseSchema):
     worker2_id: int = Field(gt=0)
     worker3_id: int = Field(gt=0)
     car_id: int = Field(gt=0)
+    is_moving: bool
 
 
 class TeamCreateSchema(TeamBaseSchema):

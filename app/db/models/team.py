@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import ForeignKey, Float
+from sqlalchemy import ForeignKey, Float, text
 
 from app.db.models.base import Base
 
@@ -22,6 +22,8 @@ class Team(Base):
 
     is_deleted: Mapped[bool] = mapped_column(default=False, nullable=False)
 
+    is_moving: Mapped[bool] = mapped_column(default=False, server_default=text("false"), nullable=False)
+
     car: Mapped["Car"] = relationship("Car",
                                       back_populates="team",
                                       lazy="joined",
@@ -34,23 +36,19 @@ class Team(Base):
 
     worker1: Mapped["User"] = relationship("User",
                                            back_populates="team_as_worker1",
-                                           lazy="joined",
+                                           lazy="selectin",
                                            uselist=False,
                                            cascade="delete",
                                            primaryjoin="Team.worker1_id == User.id")
     worker2: Mapped["User"] = relationship("User",
                                            back_populates="team_as_worker2",
-                                           lazy="joined",
+                                           lazy="selectin",
                                            uselist=False,
                                            cascade="delete",
                                            primaryjoin="Team.worker2_id == User.id")
     worker3: Mapped["User"] = relationship("User",
                                            back_populates="team_as_worker3",
-                                           lazy="joined",
+                                           lazy="selectin",
                                            uselist=False,
                                            cascade="delete",
                                            primaryjoin="Team.worker3_id == User.id")
-
-    # @property
-    # def workers(self) -> list["User"]:
-    #     return [self.worker1, self.worker2, self.worker3]

@@ -24,5 +24,5 @@ class Patient(Base):
 
     calls: Mapped[list["Call"]] = relationship("Call",
                                                back_populates="patient",
-                                               lazy="joined",
+                                               lazy="selectin",
                                                cascade="delete")
