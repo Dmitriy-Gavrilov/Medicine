@@ -2,6 +2,7 @@ import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, APIRouter, Request, Response
+from fastapi_limiter import FastAPILimiter
 from fastapi.middleware.cors import CORSMiddleware
 
 import uvicorn
@@ -18,11 +19,15 @@ from app.routers.notifications import router as notifications_router
 from app.routers.reports import router as reports_router
 from app.routers.websocket import router as websockets_router
 
+from app.redis import redisService
+
 from logger import logger
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await FastAPILimiter.init(redisService.redis_client)
+
     yield
 
     await session_manager.close()

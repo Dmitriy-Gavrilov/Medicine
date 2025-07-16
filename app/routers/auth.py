@@ -1,6 +1,7 @@
 from authx import AuthX, AuthXConfig
 from authx.exceptions import MissingTokenError, JWTDecodeError
 from fastapi import APIRouter, Response, Request, Depends
+from fastapi_limiter.depends import RateLimiter
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.dependencies import get_session
@@ -29,7 +30,8 @@ service = AuthService()
 
 @router.post(path="/login",
              summary="Войти в систему",
-             response_model=AuthResponseSchema)
+             response_model=AuthResponseSchema,
+             dependencies=[Depends(RateLimiter(times=5, minutes=1))])
 async def login(auth: AuthSchema,
                 response: Response,
                 session: AsyncSession = Depends(get_session)):
@@ -51,7 +53,8 @@ async def logout(response: Response):
 
 
 @router.post(path="/refresh",
-             summary="Обновить access токен")
+             summary="Обновить access токен",
+             dependencies=[Depends(RateLimiter(times=5, minutes=1))])
 async def refresh(request: Request,
                   response: Response,
                   session: AsyncSession = Depends(get_session)):
