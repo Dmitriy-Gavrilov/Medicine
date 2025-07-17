@@ -71,18 +71,32 @@ class CallService:
             raise CallNotFoundException()
         return CallModelSchema.from_orm(call)
 
-    async def get_call_by_team_id(self, team_id: int, session: AsyncSession) -> Call:
+    async def get_call_by_team_id(self, team_id: int, session: AsyncSession) -> CallModelSchema:
+        cached = await self.redisService.get_cache(f"calls:by_team_id{team_id}")
+        if cached:
+            return CallModelSchema.from_orm(cached)
+
         call = await self.repo.get_by_conditions(session,
                                                  and_(Call.team_id == team_id, Call.status == CallStatus.ACCEPTED))
         if not call:
             raise TeamCallNotFound()
-        return call[0]
+
+        result = CallModelSchema.from_orm(call[0])
+
+        await self.redisService.set_cache(f"calls:by_team_id{team_id}", result, 180)
+
+        return result
 
     async def get_call_full_info(self, call_id: int, session: AsyncSession) -> CallFullInfoSchema:
+        cached = await self.redisService.get_cache(f"calls:full_info{call_id}")
+        if cached:
+            return CallFullInfoSchema.from_orm(cached)
+
         call = await self.repo.get_by_id(session, call_id)
         if not call:
             raise CallNotFoundException()
-        return CallFullInfoSchema(
+
+        result = CallFullInfoSchema(
             id=call.id,
             reason=call.reason,
             address=call.address,
@@ -99,6 +113,10 @@ class CallService:
             lat=call.lat,
             lon=call.lon,
         )
+
+        await self.redisService.set_cache(f"calls:full_info{call_id}", result, 240)
+
+        return result
 
     async def get_active_calls(self, session: AsyncSession) -> list:
         return [CallModelSchema.from_orm(c) for c in await self.repo.get_by_filters(session, status=CallStatus.NEW)]
@@ -157,13 +175,13 @@ class CallService:
         await self.connection_service.notify_dispatchers(CallRejectedMessage(event=EventType.CALL_REJECTED,
                                                                              call_id=call_id))
 
+        await self.redisService.del_cache(f"calls:full_info{call_id}")
+
         return CallModelSchema.from_orm(await self.repo.get_by_id(session, call_id))
 
     async def complete_call(self, call_id: int, session: AsyncSession):
         # Установка статуса завершен
         await self.repo.update(session, call_id, status=CallStatus.COMPLETED)
-
-        await self.redisService.del_cache("teams:full_info")
 
         # Уведомления диспетчерам
         dispatchers = await self.user_service.get_users_by_filters(session, role="dispatcher")
@@ -186,6 +204,10 @@ class CallService:
         await self.connection_service.notify_workers(team.id, CompletedCallMessage(event=EventType.COMPLETED_CALL,
                                                                                    call_id=call_id))
 
+        await self.redisService.del_cache("teams:full_info")
+        await self.redisService.del_cache(f"calls:by_team_id{call.team_id}")
+        await self.redisService.del_cache(f"calls:full_info{call_id}")
+
         return call
 
     async def trouble_call(self, call_id: int, trouble_type: TroubleType, session: AsyncSession) -> Call:
@@ -200,9 +222,10 @@ class CallService:
         if task and not task.done():
             task.cancel()
 
-        await self.repo.update(session, call_id, status=CallStatus.NEW, team_id=None)
-
         await self.redisService.del_cache("teams:full_info")
+        await self.redisService.del_cache(f"calls:by_team_id{call.team_id}")
+
+        await self.repo.update(session, call_id, status=CallStatus.NEW, team_id=None)
 
         if trouble_type == TroubleType.CAR_BROKEN:
             team_car = call.team.car
