@@ -19,6 +19,10 @@ class TeamService:
         return await self.repo.get_by_filters(session, is_deleted=False)
 
     async def get_full_info_teams(self, session: AsyncSession) -> list[TeamFullInfoSchema]:
+        cached = await self.redisService.get_cache("teams:full_info")
+        if cached:
+            return [TeamFullInfoSchema(**team_dict) for team_dict in cached]
+
         teams = await self.get_teams(session)
 
         result = []
@@ -40,6 +44,8 @@ class TeamService:
             )
             result.append(team_full_info)
 
+        await self.redisService.set_cache("teams:full_info", result, 180)
+
         return result
 
     async def get_team_by_id(self, team_id: int, session: AsyncSession) -> Team:
@@ -49,6 +55,8 @@ class TeamService:
         created_team = await self.repo.create(session, Team(**team.model_dump()))
 
         await self.redisService.del_cache("users:workers_free")
+        await self.redisService.del_cache("teams:full_info")
+        await self.redisService.del_cache("cars:free")
 
         return TeamModelSchema.from_orm(created_team)
 
@@ -61,7 +69,11 @@ class TeamService:
                and t.car.status
         ]
 
-    async def get_team_by_user_id(self, user_id: int, session: AsyncSession) -> Team:
+    async def get_team_by_user_id(self, user_id: int, session: AsyncSession) -> TeamModelSchema:
+        cached = await self.redisService.get_cache(f"teams:by_user_id:{user_id}")
+        if cached:
+            return TeamModelSchema.from_orm(cached)
+
         teams = await self.repo.get_by_conditions(
             session,
             and_(
@@ -75,7 +87,12 @@ class TeamService:
         )
         if not teams:
             raise TeamNotFoundException()
-        return teams[0]
+
+        result = TeamModelSchema.from_orm(teams[0])
+
+        await self.redisService.set_cache(f"teams:by_user_id:{user_id}", result, 300)
+
+        return result
 
     async def move_team(self, team_id: int, new_coordinates: CoordinatesSchema, session: AsyncSession) -> Team:
         team = await self.repo.get_by_id(session, team_id)
@@ -93,5 +110,12 @@ class TeamService:
             raise TeamBusyException()
 
         await self.redisService.del_cache("users:workers_free")
+        await self.redisService.del_cache("teams:full_info")
+
+        await self.redisService.del_cache(f"teams:by_user_id:{team.worker1_id}")
+        await self.redisService.del_cache(f"teams:by_user_id:{team.worker2_id}")
+        await self.redisService.del_cache(f"teams:by_user_id:{team.worker3_id}")
+
+        await self.redisService.del_cache("cars:free")
 
         return await self.repo.update(session, team_id, is_deleted=True)

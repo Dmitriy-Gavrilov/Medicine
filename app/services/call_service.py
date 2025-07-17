@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.dependencies import get_manual_session
 from app.db.repository import Repository
 from app.db.models.call import Call, CallStatus, CallType
+from app.redis import redisService
 
 from app.schemas.call import CallCreateSchema, CallModelSchema, CallFullInfoSchema
 from app.schemas.car import CarUpdateSchema
@@ -34,11 +35,13 @@ class TroubleType(StrEnum):
 class CallService:
     def __init__(self):
         self.repo: Repository = Repository(Call)
+
         self.user_service: UserService = UserService()
         self.notification_service: NotificationService = NotificationService()
         self.car_service: CarService = CarService()
         self.connection_service: ConnectionService = connection_service
         self.routing_service: Router = Router()
+        self.redisService = redisService
 
         self.routes: dict[int, list[CoordinatesSchema]] = defaultdict(list)
         self.move_tasks: dict[int, asyncio.Task] = {}
@@ -133,6 +136,8 @@ class CallService:
 
         call = CallModelSchema.from_orm(await self.repo.get_by_id(session, call_id))
 
+        await self.redisService.del_cache("teams:full_info")
+
         # Оповещение диспетчеров через WS
         await self.connection_service.notify_dispatchers(CallAcceptedMessage(event=EventType.CALL_ACCEPTED,
                                                                              call_id=call_id,
@@ -157,6 +162,8 @@ class CallService:
     async def complete_call(self, call_id: int, session: AsyncSession):
         # Установка статуса завершен
         await self.repo.update(session, call_id, status=CallStatus.COMPLETED)
+
+        await self.redisService.del_cache("teams:full_info")
 
         # Уведомления диспетчерам
         dispatchers = await self.user_service.get_users_by_filters(session, role="dispatcher")
@@ -194,6 +201,8 @@ class CallService:
             task.cancel()
 
         await self.repo.update(session, call_id, status=CallStatus.NEW, team_id=None)
+
+        await self.redisService.del_cache("teams:full_info")
 
         if trouble_type == TroubleType.CAR_BROKEN:
             team_car = call.team.car

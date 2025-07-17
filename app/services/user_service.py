@@ -56,7 +56,6 @@ class UserService:
     async def get_users_by_role(self, role: UserRole, session: AsyncSession) -> list[UserModelSchema]:
         cached = await self.redisService.get_cache(f"users:{role}")
         if cached:
-            print("Без запроса в БД")
             return [UserModelSchema(**user_dict) for user_dict in cached]
 
         users = await self.repo.get_by_filters(session, role=role)
