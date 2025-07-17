@@ -3,12 +3,14 @@ import json
 from redis.asyncio import Redis
 
 from app.schemas.base import BaseSchema
+from app.settings import settings
 
 
 class RedisService:
     def __init__(self):
-        self.redis_client = Redis(host="localhost",
-                                  port=6379,
+        self.redis_client = Redis(host=settings.REDIS_HOST,
+                                  port=settings.REDIS_PORT,
+                                  max_connections=100,
                                   decode_responses=True)
 
     async def set_cache(self, key: str, value: BaseSchema, ex: int) -> None:

@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     JWT_ACCESS_TOKEN_EXPIRES: int
     JWT_REFRESH_TOKEN_EXPIRES: int
 
+    REDIS_HOST: str
+    REDIS_PORT: int
+
     ROUTE_API_URL: str = "https://router.project-osrm.org/route/v1/driving"
 
     model_config = SettingsConfigDict(env_file=".env")
