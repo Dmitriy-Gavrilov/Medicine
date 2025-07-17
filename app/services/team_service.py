@@ -5,6 +5,7 @@ from app.db.models.call import CallStatus
 from app.db.repository import Repository
 from app.db.models.team import Team
 from app.exceptions.team import TeamNotFoundException, TeamBusyException
+from app.redis import redisService
 
 from app.schemas.team import TeamCreateSchema, TeamModelSchema, CoordinatesSchema, TeamFullInfoSchema
 
@@ -12,6 +13,7 @@ from app.schemas.team import TeamCreateSchema, TeamModelSchema, CoordinatesSchem
 class TeamService:
     def __init__(self):
         self.repo: Repository = Repository(Team)
+        self.redisService = redisService
 
     async def get_teams(self, session: AsyncSession) -> list[Team]:
         return await self.repo.get_by_filters(session, is_deleted=False)
@@ -45,6 +47,9 @@ class TeamService:
 
     async def add_team(self, team: TeamCreateSchema, session: AsyncSession) -> TeamModelSchema:
         created_team = await self.repo.create(session, Team(**team.model_dump()))
+
+        await self.redisService.del_cache("users:workers_free")
+
         return TeamModelSchema.from_orm(created_team)
 
     async def get_free_teams(self, session: AsyncSession) -> list[TeamModelSchema]:
@@ -86,4 +91,7 @@ class TeamService:
         team = await self.repo.get_by_id(session, team_id)
         if any(call.status == CallStatus.ACCEPTED for call in team.calls):
             raise TeamBusyException()
+
+        await self.redisService.del_cache("users:workers_free")
+
         return await self.repo.update(session, team_id, is_deleted=True)

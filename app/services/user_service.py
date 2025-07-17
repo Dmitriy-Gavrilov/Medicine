@@ -13,12 +13,15 @@ from app.utils.password_hasher import PasswordHasher
 
 from app.schemas.notification import NotificationModelSchema
 
+from app.redis import redisService
+
 
 class UserService:
     def __init__(self):
         self.repo: Repository = Repository(User)
         self.team_service: TeamService = TeamService()
         self.notification_service: NotificationService = NotificationService()
+        self.redisService = redisService
 
     async def __get_busy_workers(self, session: AsyncSession) -> set:
         teams = await self.team_service.get_teams(session)
@@ -36,20 +39,46 @@ class UserService:
         return await self.repo.get_by_filters(session, **filters)
 
     async def get_user_by_id(self, user_id, session: AsyncSession) -> UserModelSchema:
+        cached = await self.redisService.get_cache(f"users:{user_id}")
+        if cached:
+            return UserModelSchema(**cached)
+
         user = await self.repo.get_by_id(session, user_id)
         if not user:
             raise UserNotFoundException()
-        return UserModelSchema.from_orm(user)
+
+        result = UserModelSchema.from_orm(user)
+
+        await self.redisService.set_cache(f"users:{user_id}", result, 180)
+
+        return result
 
     async def get_users_by_role(self, role: UserRole, session: AsyncSession) -> list[UserModelSchema]:
-        users = await self.repo.get_by_filters(session, role=role)
-        return [UserModelSchema.from_orm(user) for user in users]
+        cached = await self.redisService.get_cache(f"users:{role}")
+        if cached:
+            print("Без запроса в БД")
+            return [UserModelSchema(**user_dict) for user_dict in cached]
 
-    async def get_free_workers(self, session: AsyncSession) -> list[User]:
+        users = await self.repo.get_by_filters(session, role=role)
+        result = [UserModelSchema.from_orm(user) for user in users]
+
+        await self.redisService.set_cache(f"users:{role}", result, 180)
+
+        return result
+
+    async def get_free_workers(self, session: AsyncSession) -> list[UserModelSchema]:
+        cached = await self.redisService.get_cache("users:workers_free")
+        if cached:
+            return [UserModelSchema(**user_dict) for user_dict in cached]
+
         workers: list[User] = await self.repo.get_by_filters(session, role=UserRole.WORKER)
 
         busy_workers_ids = await self.__get_busy_workers(session)
-        return [w for w in workers if w.id not in busy_workers_ids]
+        result = [UserModelSchema.from_orm(w) for w in workers if w.id not in busy_workers_ids]
+
+        await self.redisService.set_cache("users:workers_free", result, ex=180)
+
+        return result
 
     async def add_user(self, user: UserCreateSchema, session: AsyncSession) -> UserModelSchema:
         find_user = await self.repo.get_by_filters(session, login=user.login)
@@ -66,6 +95,12 @@ class UserService:
             patronym=user.patronym
         )
         created_user = await self.repo.create(session, user_to_create)
+
+        await self.redisService.del_cache(f"users:{user.role}")
+
+        if user.role == UserRole.WORKER:
+            await self.redisService.del_cache("users:workers_free")
+
         return UserModelSchema.from_orm(created_user)
 
     async def delete_user(self, user_id: int, session: AsyncSession):
@@ -76,6 +111,12 @@ class UserService:
         if user.role == UserRole.WORKER and user.id in await self.__get_busy_workers(session):
             raise WorkerBusyError()
 
+        if user.role == UserRole.WORKER:
+            await self.redisService.del_cache("users:workers_free")
+
+        await self.redisService.del_cache(f"users:{user.role}")
+        await self.redisService.del_cache(f"users:{user_id}")
+
         return await self.repo.delete(session, user_id)
 
     async def update_user(self, user_id: int, user_data: UserUpdateSchema, session: AsyncSession):
@@ -84,6 +125,9 @@ class UserService:
             raise UserNotFoundException()
 
         await self.repo.update(session, user_id, **user_data.model_dump())
+
+        await self.redisService.del_cache(f"users:{user.role}")
+        await self.redisService.del_cache(f"users:{user_id}")
 
         return await self.repo.get_by_id(session, user_id)
 
