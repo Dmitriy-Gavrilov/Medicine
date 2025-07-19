@@ -16,12 +16,15 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 config = AuthXConfig(
     JWT_ALGORITHM='HS256',
     JWT_SECRET_KEY=settings.JWT_SECRET_KEY,
+    JWT_COOKIE_SAMESITE="none",
+    JWT_COOKIE_SECURE=True,
     JWT_ACCESS_COOKIE_NAME=settings.JWT_COOKIE_NAME,
     JWT_REFRESH_COOKIE_NAME=settings.JWT_REFRESH_COOKIE_NAME,
     JWT_TOKEN_LOCATION=['cookies'],
-    JWT_COOKIE_CSRF_PROTECT=False,
+    JWT_COOKIE_CSRF_PROTECT=True,
     JWT_ACCESS_TOKEN_EXPIRES=settings.JWT_ACCESS_TOKEN_EXPIRES,
-    JWT_REFRESH_TOKEN_EXPIRES=settings.JWT_REFRESH_TOKEN_EXPIRES
+    JWT_REFRESH_TOKEN_EXPIRES=settings.JWT_REFRESH_TOKEN_EXPIRES,
+    JWT_COOKIE_MAX_AGE=settings.JWT_ACCESS_TOKEN_EXPIRES
 )
 
 security = AuthX(config=config)
@@ -44,19 +47,18 @@ async def login(auth: AuthSchema,
 
     refresh_payload = jwt.get_unverified_claims(refresh_token)
     await service.update_refresh_id(user.id, refresh_payload["jti"], session)
-    print("host=", request.client.host)
     await service.update_user_ip(user.id, request.client.host, session)
 
-    response.set_cookie(config.JWT_ACCESS_COOKIE_NAME, access_token, httponly=True, samesite="none", secure=True)
-    response.set_cookie(config.JWT_REFRESH_COOKIE_NAME, refresh_token, httponly=True, samesite="none", secure=True)
+    security.set_access_cookies(access_token, response)
+    security.set_refresh_cookies(refresh_token, response)
+
     return AuthResponseSchema(access_token=access_token, refresh_token=refresh_token)
 
 
 @router.post(path="/logout",
              summary="Выйти из системы")
 async def logout(response: Response):
-    response.delete_cookie(config.JWT_ACCESS_COOKIE_NAME)
-    response.delete_cookie(config.JWT_REFRESH_COOKIE_NAME)
+    security.unset_cookies(response)
 
 
 @router.post(path="/refresh",
@@ -82,10 +84,8 @@ async def refresh(request: Request,
         response.delete_cookie(config.JWT_ACCESS_COOKIE_NAME)
         response.delete_cookie(config.JWT_REFRESH_COOKIE_NAME)
 
-        response.set_cookie(config.JWT_ACCESS_COOKIE_NAME, new_access_token, httponly=True, samesite="none",
-                            secure=True)
-        response.set_cookie(config.JWT_REFRESH_COOKIE_NAME, new_refresh_token, httponly=True, samesite="none",
-                            secure=True)
+        security.set_access_cookies(new_access_token, response)
+        security.set_refresh_cookies(new_refresh_token, response)
     except MissingTokenError:
         raise AuthError()
     except JWTDecodeError:

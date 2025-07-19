@@ -16,7 +16,8 @@ from app.utils.role_verifier import RoleVerifier
 async def validate_token_from_request(request: Request) -> TokenPayload:
     try:
         token: RequestToken = await security.get_access_token_from_request(request)
-        token_payload: TokenPayload = security.verify_token(token, verify_csrf=False)
+        token.csrf = request.headers.get("X-CSRF-TOKEN")
+        token_payload: TokenPayload = security.verify_token(token)
         return token_payload
     except MissingTokenError:
         raise AuthError()
@@ -27,7 +28,8 @@ async def validate_token_from_request(request: Request) -> TokenPayload:
 async def validate_token_from_request_ws(websocket: WebSocket) -> TokenPayload:
     try:
         token: RequestToken = RequestToken(token=websocket.cookies.get("access_token"), location="cookies")
-        token_payload: TokenPayload = security.verify_token(token, verify_csrf=False)
+        token.csrf = websocket.headers.get("X-CSRF-TOKEN")
+        token_payload: TokenPayload = security.verify_token(token)
         return token_payload
     except MissingTokenError:
         raise AuthError()
