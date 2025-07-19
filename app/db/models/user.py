@@ -2,7 +2,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import Enum
+from sqlalchemy import Enum, text
 
 from app.db.models.base import Base
 
@@ -24,6 +24,9 @@ class User(Base):
     name: Mapped[str] = mapped_column(nullable=False)
     surname: Mapped[str] = mapped_column(nullable=False)
     patronym: Mapped[str] = mapped_column(nullable=False)
+
+    refresh_id: Mapped[str | None] = mapped_column(default=None)
+    ip: Mapped[str | None] = mapped_column(default=None)
 
     notifications: Mapped[list["Notification"]] = relationship("Notification",
                                                                back_populates="user",
