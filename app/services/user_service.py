@@ -47,7 +47,7 @@ class UserService:
         if not user:
             raise UserNotFoundException()
 
-        result = UserModelSchema.from_orm(user)
+        result = UserModelSchema.model_validate(user)
 
         await self.redisService.set_cache(f"users:{user_id}", result, 180)
 
@@ -59,7 +59,7 @@ class UserService:
             return [UserModelSchema(**user_dict) for user_dict in cached]
 
         users = await self.repo.get_by_filters(session, role=role)
-        result = [UserModelSchema.from_orm(user) for user in users]
+        result = [UserModelSchema.model_validate(user) for user in users]
 
         await self.redisService.set_cache(f"users:{role}", result, 180)
 
@@ -73,7 +73,7 @@ class UserService:
         workers: list[User] = await self.repo.get_by_filters(session, role=UserRole.WORKER)
 
         busy_workers_ids = await self.__get_busy_workers(session)
-        result = [UserModelSchema.from_orm(w) for w in workers if w.id not in busy_workers_ids]
+        result = [UserModelSchema.model_validate(w) for w in workers if w.id not in busy_workers_ids]
 
         await self.redisService.set_cache("users:workers_free", result, ex=180)
 
@@ -100,7 +100,7 @@ class UserService:
         if user.role == UserRole.WORKER:
             await self.redisService.del_cache("users:workers_free")
 
-        return UserModelSchema.from_orm(created_user)
+        return UserModelSchema.model_validate(created_user)
 
     async def delete_user(self, user_id: int, session: AsyncSession):
         user = await self.repo.get_by_id(session, user_id)

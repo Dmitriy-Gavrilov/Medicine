@@ -16,7 +16,7 @@ class NotificationService:
     async def notify_user(self, note: NotificationCreateSchema, session: AsyncSession) -> NotificationModelSchema:
         await self.redisService.del_cache(f"notifications:{note.user_id}")
         created_note = await self.repo.create(session, Notification(**note.model_dump()))
-        return NotificationModelSchema.from_orm(created_note)
+        return NotificationModelSchema.model_validate(created_note)
 
     async def notify_users(self, ids: list[int], note: NotificationBaseSchema, session: AsyncSession) -> None:
         for i in ids:

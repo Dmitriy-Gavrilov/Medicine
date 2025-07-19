@@ -58,12 +58,12 @@ class TeamService:
         await self.redisService.del_cache("teams:full_info")
         await self.redisService.del_cache("cars:free")
 
-        return TeamModelSchema.from_orm(created_team)
+        return TeamModelSchema.model_validate(created_team)
 
     async def get_free_teams(self, session: AsyncSession) -> list[TeamModelSchema]:
         teams = await self.get_teams(session)
         return [
-            TeamModelSchema.from_orm(t)
+            TeamModelSchema.model_validate(t)
             for t in teams
             if not any(call.status == CallStatus.ACCEPTED for call in t.calls)
                and t.car.status
@@ -72,7 +72,7 @@ class TeamService:
     async def get_team_by_user_id(self, user_id: int, session: AsyncSession) -> TeamModelSchema:
         cached = await self.redisService.get_cache(f"teams:by_user_id:{user_id}")
         if cached:
-            return TeamModelSchema.from_orm(cached)
+            return TeamModelSchema.model_validate(cached)
 
         teams = await self.repo.get_by_conditions(
             session,
@@ -88,7 +88,7 @@ class TeamService:
         if not teams:
             raise TeamNotFoundException()
 
-        result = TeamModelSchema.from_orm(teams[0])
+        result = TeamModelSchema.model_validate(teams[0])
 
         await self.redisService.set_cache(f"teams:by_user_id:{user_id}", result, 300)
 

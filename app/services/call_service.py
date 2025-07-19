@@ -69,19 +69,19 @@ class CallService:
         call = await self.repo.get_by_id(session, call_id)
         if not call:
             raise CallNotFoundException()
-        return CallModelSchema.from_orm(call)
+        return CallModelSchema.model_validate(call)
 
     async def get_call_by_team_id(self, team_id: int, session: AsyncSession) -> CallModelSchema:
         cached = await self.redisService.get_cache(f"calls:by_team_id{team_id}")
         if cached:
-            return CallModelSchema.from_orm(cached)
+            return CallModelSchema.model_validate(cached)
 
         call = await self.repo.get_by_conditions(session,
                                                  and_(Call.team_id == team_id, Call.status == CallStatus.ACCEPTED))
         if not call:
             raise TeamCallNotFound()
 
-        result = CallModelSchema.from_orm(call[0])
+        result = CallModelSchema.model_validate(call[0])
 
         await self.redisService.set_cache(f"calls:by_team_id{team_id}", result, 180)
 
@@ -90,7 +90,7 @@ class CallService:
     async def get_call_full_info(self, call_id: int, session: AsyncSession) -> CallFullInfoSchema:
         cached = await self.redisService.get_cache(f"calls:full_info{call_id}")
         if cached:
-            return CallFullInfoSchema.from_orm(cached)
+            return CallFullInfoSchema.model_validate(cached)
 
         call = await self.repo.get_by_id(session, call_id)
         if not call:
@@ -119,7 +119,7 @@ class CallService:
         return result
 
     async def get_active_calls(self, session: AsyncSession) -> list:
-        return [CallModelSchema.from_orm(c) for c in await self.repo.get_by_filters(session, status=CallStatus.NEW)]
+        return [CallModelSchema.model_validate(c) for c in await self.repo.get_by_filters(session, status=CallStatus.NEW)]
 
     async def add_call(self, call: CallCreateSchema, session: AsyncSession) -> CallModelSchema:
         find_call = await self.repo.get_by_filters(session, **call.model_dump())
@@ -127,7 +127,7 @@ class CallService:
             raise CallAlreadyExistsException()
 
         call_to_create = Call(**call.model_dump())
-        created_call = CallModelSchema.from_orm(await self.repo.create(session, call_to_create))
+        created_call = CallModelSchema.model_validate(await self.repo.create(session, call_to_create))
 
         # Уведомления диспетчерам
         dispatchers = await self.user_service.get_users_by_filters(session, role="dispatcher")
@@ -152,7 +152,7 @@ class CallService:
                                                                             text="Назначен вызов"),
                                                      session)
 
-        call = CallModelSchema.from_orm(await self.repo.get_by_id(session, call_id))
+        call = CallModelSchema.model_validate(await self.repo.get_by_id(session, call_id))
 
         await self.redisService.del_cache("teams:full_info")
 
@@ -177,7 +177,7 @@ class CallService:
 
         await self.redisService.del_cache(f"calls:full_info{call_id}")
 
-        return CallModelSchema.from_orm(await self.repo.get_by_id(session, call_id))
+        return CallModelSchema.model_validate(await self.repo.get_by_id(session, call_id))
 
     async def complete_call(self, call_id: int, session: AsyncSession):
         # Установка статуса завершен

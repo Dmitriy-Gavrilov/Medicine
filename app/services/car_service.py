@@ -17,9 +17,9 @@ class CarService:
     async def get_cars(self, session: AsyncSession) -> list[CarModelSchema]:
         cached = await self.redisService.get_cache("cars")
         if cached:
-            return [CarModelSchema.from_orm(car_dict) for car_dict in cached]
+            return [CarModelSchema.model_validate(car_dict) for car_dict in cached]
 
-        result = [CarModelSchema.from_orm(car) for car in await self.repo.get_by_filters(session, is_deleted=False)]
+        result = [CarModelSchema.model_validate(car) for car in await self.repo.get_by_filters(session, is_deleted=False)]
 
         await self.redisService.set_cache("cars", result, 300)
 
@@ -28,10 +28,10 @@ class CarService:
     async def get_free_cars(self, session: AsyncSession) -> list[CarModelSchema]:
         cached = await self.redisService.get_cache("cars:free")
         if cached:
-            return [CarModelSchema.from_orm(car_dict) for car_dict in cached]
+            return [CarModelSchema.model_validate(car_dict) for car_dict in cached]
 
         cars = await self.repo.get_by_filters(session, is_deleted=False)
-        result = [CarModelSchema.from_orm(c) for c in cars if not c.team and c.status]
+        result = [CarModelSchema.model_validate(c) for c in cars if not c.team and c.status]
 
         await self.redisService.set_cache("cars:free", result, 300)
 
@@ -47,7 +47,7 @@ class CarService:
         await self.redisService.del_cache("cars")
         await self.redisService.del_cache("cars:free")
 
-        return CarModelSchema.from_orm(created_car)
+        return CarModelSchema.model_validate(created_car)
 
     async def delete_car(self, car_id: int, session: AsyncSession):
         car = await self.repo.get_by_id(session, car_id)

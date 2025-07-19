@@ -21,11 +21,11 @@ class AuthService:
             raise WrongLoginPasswordException()
         if user.role != auth.role:
             raise WrongRoleException()
-        return UserModelSchema.from_orm(user)
+        return UserModelSchema.model_validate(user)
 
     async def get_user(self, user_id: int, session: AsyncSession) -> UserModelSchema:
         user = await self.repo.get_by_id(session, user_id)
-        return UserModelSchema.from_orm(user)
+        return UserModelSchema.model_validate(user)
 
     async def update_refresh_id(self, user_id: int, refresh_id: str, session: AsyncSession) -> None:
         return await self.repo.update(session, user_id, refresh_id=refresh_id)
@@ -37,5 +37,5 @@ class AuthService:
                                  session: AsyncSession) -> UserModelSchema:
         user = await self.repo.get_by_id(session, user_id)
         if user.ip == user_ip and user.refresh_id == refresh_id:
-            return UserModelSchema.from_orm(user)
+            return UserModelSchema.model_validate(user)
         # raise ошибки - неверный токен/ip

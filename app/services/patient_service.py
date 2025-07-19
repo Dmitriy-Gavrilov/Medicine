@@ -19,12 +19,12 @@ class PatientService:
         patient = await self.repo.get_by_id(session, patient_id)
         if not patient:
             raise PatientNotFoundException()
-        return PatientModelSchema.from_orm(patient)
+        return PatientModelSchema.model_validate(patient)
 
     async def add_patient(self, patient: PatientCreateSchema, session: AsyncSession) -> PatientModelSchema:
         patient_to_create = Patient(**patient.model_dump())
         created_patient = await self.repo.create(session, patient_to_create)
-        return PatientModelSchema.from_orm(created_patient)
+        return PatientModelSchema.model_validate(created_patient)
 
     async def delete_patient(self, patient_id: int, session: AsyncSession):
         patient = await self.repo.get_by_id(session, patient_id)
