@@ -3,6 +3,7 @@ from authx.exceptions import MissingTokenError, JWTDecodeError
 from fastapi import APIRouter, Response, Request, Depends
 from fastapi_limiter.depends import RateLimiter
 from sqlalchemy.ext.asyncio import AsyncSession
+from jose import jwt
 
 from app.db.dependencies import get_session
 from app.exceptions.auth import AuthError, TokenExpiredError
@@ -33,12 +34,18 @@ service = AuthService()
              response_model=AuthResponseSchema,
              dependencies=[Depends(RateLimiter(times=5, minutes=1))])
 async def login(auth: AuthSchema,
+                request: Request,
                 response: Response,
                 session: AsyncSession = Depends(get_session)):
     user = await service.check_user(auth, session)
 
     access_token = security.create_access_token(uid=str(user.id), data={"role": user.role})
     refresh_token = security.create_refresh_token(uid=str(user.id))
+
+    refresh_payload = jwt.get_unverified_claims(refresh_token)
+    await service.update_refresh_id(user.id, refresh_payload["jti"], session)
+    print("host=", request.client.host)
+    await service.update_user_ip(user.id, request.client.host, session)
 
     response.set_cookie(config.JWT_ACCESS_COOKIE_NAME, access_token, httponly=True, samesite="none", secure=True)
     response.set_cookie(config.JWT_REFRESH_COOKIE_NAME, refresh_token, httponly=True, samesite="none", secure=True)
@@ -62,12 +69,22 @@ async def refresh(request: Request,
         refresh_token = await security.get_refresh_token_from_request(request)
         token_payload = security.verify_token(refresh_token, verify_csrf=False)
         user_id = int(token_payload.sub)
+        refresh_jti = token_payload.jti
 
-        user = await service.get_user(user_id, session)
+        user = await service.check_user_refresh(user_id, request.client.host, refresh_jti, session)
+
         new_access_token = security.create_access_token(uid=str(user_id), data={"role": user.role})
+        new_refresh_token = security.create_refresh_token(uid=str(user.id))
+
+        refresh_payload = jwt.get_unverified_claims(new_refresh_token)
+        await service.update_refresh_id(user.id, refresh_payload["jti"], session)
 
         response.delete_cookie(config.JWT_ACCESS_COOKIE_NAME)
+        response.delete_cookie(config.JWT_REFRESH_COOKIE_NAME)
+
         response.set_cookie(config.JWT_ACCESS_COOKIE_NAME, new_access_token, httponly=True, samesite="none",
+                            secure=True)
+        response.set_cookie(config.JWT_REFRESH_COOKIE_NAME, new_refresh_token, httponly=True, samesite="none",
                             secure=True)
     except MissingTokenError:
         raise AuthError()

@@ -26,3 +26,16 @@ class AuthService:
     async def get_user(self, user_id: int, session: AsyncSession) -> UserModelSchema:
         user = await self.repo.get_by_id(session, user_id)
         return UserModelSchema.from_orm(user)
+
+    async def update_refresh_id(self, user_id: int, refresh_id: str, session: AsyncSession) -> None:
+        return await self.repo.update(session, user_id, refresh_id=refresh_id)
+
+    async def update_user_ip(self, user_id: int, user_ip: str, session: AsyncSession) -> None:
+        return await self.repo.update(session, user_id, ip=user_ip)
+
+    async def check_user_refresh(self, user_id: int, user_ip: str, refresh_id: str,
+                                 session: AsyncSession) -> UserModelSchema:
+        user = await self.repo.get_by_id(session, user_id)
+        if user.ip == user_ip and user.refresh_id == refresh_id:
+            return UserModelSchema.from_orm(user)
+        # raise ошибки - неверный токен/ip
