@@ -1,0 +1,14 @@
+.idea/
+venv/
+__pycache__/
+
+logs/
+
+.env
+
+localhost+1.pem
+localhost+1-key.pem
+
+.gitignore
+
+plan.txt
