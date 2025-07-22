@@ -10,6 +10,7 @@ class RedisService:
     def __init__(self):
         self.redis_client = Redis(host=settings.REDIS_HOST,
                                   port=settings.REDIS_PORT,
+                                  password=settings.REDIS_PASSWORD,
                                   max_connections=100,
                                   decode_responses=True)
 
