@@ -28,8 +28,7 @@ async def validate_token_from_request(request: Request) -> TokenPayload:
 async def validate_token_from_request_ws(websocket: WebSocket) -> TokenPayload:
     try:
         token: RequestToken = RequestToken(token=websocket.cookies.get("access_token"), location="cookies")
-        token.csrf = websocket.headers.get("X-CSRF-TOKEN")
-        token_payload: TokenPayload = security.verify_token(token)
+        token_payload: TokenPayload = security.verify_token(token, verify_csrf=False)
         return token_payload
     except MissingTokenError:
         raise AuthError()
