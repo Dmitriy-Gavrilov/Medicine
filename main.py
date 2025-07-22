@@ -5,8 +5,6 @@ from fastapi import FastAPI, APIRouter, Request, Response
 from fastapi_limiter import FastAPILimiter
 from fastapi.middleware.cors import CORSMiddleware
 
-import uvicorn
-
 from app.db.dependencies import session_manager
 
 from app.routers.user import router as users_router
@@ -75,9 +73,3 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-if __name__ == "__main__":
-    uvicorn.run("main:app",
-                host="localhost",
-                ssl_certfile="localhost+1.pem",
-                ssl_keyfile="localhost+1-key.pem")

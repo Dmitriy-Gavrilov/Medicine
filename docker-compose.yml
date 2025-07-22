@@ -1,0 +1,62 @@
+services:
+    api:
+        container_name: medicine-api
+        build: .
+        ports:
+            - "8000:8000"
+        volumes:
+            - ./localhost+1.pem:/app/localhost+1.pem
+            - ./localhost+1-key.pem:/app/localhost+1-key.pem
+        env_file:
+            - ".env"
+        depends_on:
+            redis:
+                condition: service_healthy
+            alembic:
+                condition: service_started
+
+    postgres:
+        container_name: medicine-postgres
+        image: postgres:16
+        restart: unless-stopped
+        environment:
+            POSTGRES_DB: ${POSTGRES_NAME}
+            PG_USER: ${POSTGRES_USER}
+            POSTGRES_USER: ${POSTGRES_USER}
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+        volumes:
+            - postgres_data:/var/lib/postgresql/data
+        healthcheck:
+            test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_NAME}" ]
+            interval: 5s
+            timeout: 3s
+            retries: 5
+
+    alembic:
+        build: .
+        command: sh -c "alembic upgrade head"
+        depends_on:
+            postgres:
+                condition: service_healthy
+        env_file:
+            - ".env"
+
+    redis:
+        container_name: medicine-redis
+        image: redis/redis-stack-server:latest
+        restart: unless-stopped
+        volumes:
+            - redis_data:/data
+        environment:
+            REDIS_PASSWORD: ${REDIS_PASSWORD}
+        command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+        healthcheck:
+            test: [ "CMD", "redis-cli", "ping" ]
+            interval: 5s
+            timeout: 3s
+            retries: 5
+
+
+volumes:
+    postgres_data:
+    redis_data:
