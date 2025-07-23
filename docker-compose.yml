@@ -7,6 +7,7 @@ services:
         volumes:
             - ./localhost+1.pem:/app/localhost+1.pem
             - ./localhost+1-key.pem:/app/localhost+1-key.pem
+            - ./logs:/app/logs
         env_file:
             - ".env"
         depends_on:
